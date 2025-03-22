@@ -10,7 +10,7 @@ from augment.spatial import *
 from third_party.diffaug import DiffAugment
 
 
-@gin.configurable("augment", whitelist=["fn"])
+@gin.configurable("augment", allowlist=["fn"])
 def get_augment(mode='none', **kwargs):
     _mapping = {
         'none': NoAugment,
@@ -30,6 +30,7 @@ def get_augment(mode='none', **kwargs):
 
 @gin.configurable
 class NoAugment(nn.Module):
+
     def __init__(self):
         super(NoAugment, self).__init__()
 
@@ -37,8 +38,9 @@ class NoAugment(nn.Module):
         return input
 
 
-@gin.configurable(whitelist=["sigma"])
+@gin.configurable(allowlist=["sigma"])
 class Gaussian(nn.Module):
+
     def __init__(self, sigma):
         super(Gaussian, self).__init__()
         self.sigma = sigma
@@ -51,6 +53,7 @@ class Gaussian(nn.Module):
 
 @gin.configurable
 class GaussianBlur(nn.Module):
+
     def __init__(self, sigma_range):
         """Blurs the given image with separable convolution.
 
@@ -71,8 +74,9 @@ class GaussianBlur(nn.Module):
         kernel_size = radius * 2 + 1
 
         sigma = np.random.uniform(*self.sigma_range)
-        kernel = torch.unsqueeze(get_gaussian_kernel2d((kernel_size, kernel_size),
-                                                       (sigma, sigma)), dim=0)
+        kernel = torch.unsqueeze(get_gaussian_kernel2d(
+            (kernel_size, kernel_size), (sigma, sigma)),
+                                 dim=0)
         blurred = filter2D(inputs, kernel, "reflect")
 
         return blurred
@@ -80,6 +84,7 @@ class GaussianBlur(nn.Module):
 
 @gin.configurable
 class RandomColorGrayLayer(nn.Module):
+
     def __init__(self):
         super(RandomColorGrayLayer, self).__init__()
         _weight = torch.tensor([[0.299, 0.587, 0.114]])
@@ -92,54 +97,51 @@ class RandomColorGrayLayer(nn.Module):
 
 
 class RandomApply(nn.Module):
+
     def __init__(self, fn, p):
         super().__init__()
         self.fn = fn
         self.p = p
 
     def forward(self, inputs):
-        _prob = inputs.new_full((inputs.size(0),), self.p)
+        _prob = inputs.new_full((inputs.size(0), ), self.p)
         _mask = torch.bernoulli(_prob).view(-1, 1, 1, 1)
         return inputs * (1 - _mask) + self.fn(inputs) * _mask
 
 
 def simclr():
-    return nn.Sequential(
-            RandomResizeCropLayer(),
-            HorizontalFlipLayer(),
-            RandomApply(ColorJitterLayer(), p=0.8),
-            RandomApply(RandomColorGrayLayer(), p=0.2)
-        )
+    return nn.Sequential(RandomResizeCropLayer(), HorizontalFlipLayer(),
+                         RandomApply(ColorJitterLayer(), p=0.8),
+                         RandomApply(RandomColorGrayLayer(), p=0.2))
 
 
 def simclr_hq():
-    return nn.Sequential(
-            RandomResizeCropLayer(),
-            HorizontalFlipLayer(),
-            RandomApply(ColorJitterLayer(), p=0.8),
-            RandomApply(RandomColorGrayLayer(), p=0.2),
-            RandomApply(GaussianBlur(), p=0.5)
-        )
+    return nn.Sequential(RandomResizeCropLayer(), HorizontalFlipLayer(),
+                         RandomApply(ColorJitterLayer(), p=0.8),
+                         RandomApply(RandomColorGrayLayer(), p=0.2),
+                         RandomApply(GaussianBlur(), p=0.5))
 
 
 def simclr_hq_cutout():
     return nn.Sequential(
-            RandomResizeCropLayer(),
-            HorizontalFlipLayer(),
-            RandomApply(ColorJitterLayer(), p=0.8),
-            RandomApply(RandomColorGrayLayer(), p=0.2),
-            RandomApply(GaussianBlur(), p=0.5),
-            RandomApply(CutOut(), p=0.5),
-        )
+        RandomResizeCropLayer(),
+        HorizontalFlipLayer(),
+        RandomApply(ColorJitterLayer(), p=0.8),
+        RandomApply(RandomColorGrayLayer(), p=0.2),
+        RandomApply(GaussianBlur(), p=0.5),
+        RandomApply(CutOut(), p=0.5),
+    )
 
 
 class DiffAugLayer(nn.Module):
+
     def __init__(self, policy=""):
         super().__init__()
         self.policy = policy
 
     def forward(self, inputs):
         return DiffAugment(inputs, policy=self.policy)
+
 
 def diffaug():
     return DiffAugLayer(policy='color,translation,cutout')
